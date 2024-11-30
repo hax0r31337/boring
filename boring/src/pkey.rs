@@ -43,6 +43,7 @@
 use crate::ffi;
 use foreign_types::{ForeignType, ForeignTypeRef};
 use libc::{c_int, c_long};
+use openssl_macros::corresponds;
 use std::ffi::CString;
 use std::fmt;
 use std::mem;
@@ -244,6 +245,26 @@ where
         U: HasPublic,
     {
         unsafe { ffi::EVP_PKEY_cmp(self.as_ptr(), other.as_ptr()) == 1 }
+    }
+
+    #[corresponds(EVP_PKEY_get_raw_public_key)]
+    pub fn raw_public_key(&self) -> Result<Vec<u8>, ErrorStack> {
+        unsafe {
+            let mut len = 0;
+            cvt(ffi::EVP_PKEY_get_raw_public_key(
+                self.as_ptr(),
+                ptr::null_mut(),
+                &mut len,
+            ))?;
+            let mut buf = vec![0u8; len];
+            cvt(ffi::EVP_PKEY_get_raw_public_key(
+                self.as_ptr(),
+                buf.as_mut_ptr(),
+                &mut len,
+            ))?;
+            buf.truncate(len);
+            Ok(buf)
+        }
     }
 }
 
@@ -474,6 +495,26 @@ impl PKey<Private> {
             .map(|p| PKey::from_ptr(p))
         }
     }
+
+    /// Creates a private key from its raw byte representation
+    ///
+    /// Algorithm types that support raw private keys are HMAC, X25519, ED25519, X448 or ED448
+    #[corresponds(EVP_PKEY_new_raw_private_key)]
+    pub fn private_key_from_raw_bytes(
+        bytes: &[u8],
+        key_type: Id,
+    ) -> Result<PKey<Private>, ErrorStack> {
+        unsafe {
+            ffi::init();
+            cvt_p(ffi::EVP_PKEY_new_raw_private_key(
+                key_type.as_raw(),
+                ptr::null_mut(),
+                bytes.as_ptr(),
+                bytes.len(),
+            ))
+            .map(|p| PKey::from_ptr(p))
+        }
+    }
 }
 
 impl PKey<Public> {
@@ -500,6 +541,26 @@ impl PKey<Public> {
         PKey<Public>,
         ffi::d2i_PUBKEY,
         ::libc::c_long
+    }
+
+    /// Creates a public key from its raw byte representation
+    ///
+    /// Algorithm types that support raw public keys are X25519, ED25519, X448 or ED448
+    #[corresponds(EVP_PKEY_new_raw_public_key)]
+    pub fn public_key_from_raw_bytes(
+        bytes: &[u8],
+        key_type: Id,
+    ) -> Result<PKey<Public>, ErrorStack> {
+        unsafe {
+            ffi::init();
+            cvt_p(ffi::EVP_PKEY_new_raw_public_key(
+                key_type.as_raw(),
+                ptr::null_mut(),
+                bytes.as_ptr(),
+                bytes.len(),
+            ))
+            .map(|p| PKey::from_ptr(p))
+        }
     }
 }
 
